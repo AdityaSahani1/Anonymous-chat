@@ -78,7 +78,8 @@
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "concurrently": "^9.2.1",
-    "express": "^5.2.1",
+  //  "express": "^5.2.1",
+    "express": "^4.19.2"
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "uuid": "^13.0.0",
