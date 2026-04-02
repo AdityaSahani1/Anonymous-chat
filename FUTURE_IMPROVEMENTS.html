@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cosmos Chat — Future Improvements</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0e14;
+      --surface: #13151f;
+      --surface2: #1b1e2e;
+      --border: #252840;
+      --accent: #6c63ff;
+      --accent2: #a78bfa;
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --pink: #f472b6;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── Header ── */
+    header {
+      max-width: 900px;
+      margin: 0 auto 60px;
+      text-align: center;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .logo-text {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    header h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent2), var(--accent), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    /* ── Stats row ── */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 32px;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 6px 18px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .stat strong {
+      color: var(--accent2);
+    }
+
+    /* ── Sections ── */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .section-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .section-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ── Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: border-color 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .card-emoji {
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 100px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .badge-easy   { background: #052e16; color: var(--green); border: 1px solid #166534; }
+    .badge-medium { background: #451a03; color: var(--yellow); border: 1px solid #92400e; }
+    .badge-hard   { background: #450a0a; color: var(--red); border: 1px solid #991b1b; }
+    .badge-idea   { background: #1e1b4b; color: var(--accent2); border: 1px solid #3730a3; }
+
+    .card h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .card p {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .card-footer {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── Color tints per section ── */
+    .tint-purple .section-icon { background: #1e1b4b; }
+    .tint-purple .card:hover   { border-color: var(--accent); }
+    .tint-purple .card::before { background: linear-gradient(135deg, rgba(108,99,255,0.05), transparent); }
+
+    .tint-green .section-icon { background: #052e16; }
+    .tint-green .card:hover   { border-color: var(--green); }
+    .tint-green .card::before { background: linear-gradient(135deg, rgba(52,211,153,0.05), transparent); }
+
+    .tint-yellow .section-icon { background: #451a03; }
+    .tint-yellow .card:hover   { border-color: var(--yellow); }
+    .tint-yellow .card::before { background: linear-gradient(135deg, rgba(251,191,36,0.05), transparent); }
+
+    .tint-blue .section-icon { background: #172554; }
+    .tint-blue .card:hover   { border-color: var(--blue); }
+    .tint-blue .card::before { background: linear-gradient(135deg, rgba(96,165,250,0.05), transparent); }
+
+    .tint-pink .section-icon { background: #500724; }
+    .tint-pink .card:hover   { border-color: var(--pink); }
+    .tint-pink .card::before { background: linear-gradient(135deg, rgba(244,114,182,0.05), transparent); }
+
+    .tint-red .section-icon { background: #450a0a; }
+    .tint-red .card:hover   { border-color: var(--red); }
+    .tint-red .card::before { background: linear-gradient(135deg, rgba(248,113,113,0.05), transparent); }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 48px;
+      padding: 18px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .legend span {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .legend-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-right: 4px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      max-width: 900px;
+      margin: 48px auto 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">✦</div>
+      <span class="logo-text">COSMOS CHAT</span>
+    </div>
+    <h1>Future Improvements</h1>
+    <p>A roadmap of features and enhancements to build next.</p>
+    <div class="stats">
+      <div class="stat">Last updated <strong>April 2026</strong></div>
+      <div class="stat"><strong>22</strong> ideas across <strong>6</strong> categories</div>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- ── Messaging ── -->
+    <section class="tint-purple">
+      <div class="section-header">
+        <div class="section-icon">💬</div>
+        <div>
+          <div class="section-title">Messaging</div>
+          <div class="section-desc">Improvements to the core chat experience</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">↩️</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Reply to Messages</h3>
+          <p>Tap any message to quote-reply to it. The reply shows a preview of the original message above the new one, making conversations easier to follow.</p>
+          <div class="card-footer">💡 Store parent message ID in the messages table</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">😄</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Emoji Reactions</h3>
+          <p>Let users react to messages with emoji (👍 ❤️ 😂 etc.). Show reaction counts beneath each message. Remove your own reaction by clicking it again.</p>
+          <div class="card-footer">💡 New reactions table linked to message IDs</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">✏️</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Typing Indicators</h3>
+          <p>Show a "Someone is typing…" indicator at the bottom of the chat when another user is composing a message. Auto-hide after a short idle timeout.</p>
+          <div class="card-footer">💡 Socket.io event, no DB change needed</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🎨</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Markdown Support</h3>
+          <p>Let users format messages with basic Markdown: **bold**, _italic_, `code`, and fenced code blocks. Sanitize output to prevent XSS.</p>
+          <div class="card-footer">💡 marked.js + DOMPurify on the client</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">⏱️</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Custom Self-Destruct Timers</h3>
+          <p>Allow each room to have its own configurable message expiry — from 1 minute to 24 hours. Admins set it per room, users see the countdown on each message.</p>
+          <div class="card-footer">💡 Add ttl_seconds column to rooms table</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🔍</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Message Search</h3>
+          <p>A search bar in each room that filters visible messages in real time by keyword. For admins, search across all rooms from the dashboard.</p>
+          <div class="card-footer">💡 SQLite FTS5 (full-text search) extension</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Users & Identity ── -->
+    <section class="tint-blue">
+      <div class="section-header">
+        <div class="section-icon">👤</div>
+        <div>
+          <div class="section-title">Users &amp; Identity</div>
+          <div class="section-desc">Better user experience and identity options</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🎭</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Generated Avatars</h3>
+          <p>Auto-generate a unique color avatar for each username using a hash — so the same username always gets the same color, making users visually recognizable without accounts.</p>
+          <div class="card-footer">💡 Hash username → HSL color, no storage needed</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">📩</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Private Direct Messages</h3>
+          <p>Let two online users open a private 1-on-1 chat. No message history kept — everything is ephemeral and disappears when either user disconnects.</p>
+          <div class="card-footer">💡 Private Socket.io rooms per user pair</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🔔</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Browser Notifications</h3>
+          <p>Ask permission once, then send a Web Push notification when a new message arrives in a room the user has open in a background tab.</p>
+          <div class="card-footer">💡 Notification API — no server push needed for tab-level</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Rooms ── -->
+    <section class="tint-green">
+      <div class="section-header">
+        <div class="section-icon">🏠</div>
+        <div>
+          <div class="section-title">Rooms</div>
+          <div class="section-desc">More flexibility in how rooms work</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">📂</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Room Categories</h3>
+          <p>Group rooms into categories (e.g. General, Gaming, Tech) shown as collapsible sections in the sidebar, making navigation easier as the number of rooms grows.</p>
+          <div class="card-footer">💡 Add category column to rooms table</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">📌</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Pinned Messages</h3>
+          <p>Admins can pin up to 3 messages per room. Pinned messages appear in a dismissible banner at the top of the chat, visible to all members on join.</p>
+          <div class="card-footer">💡 Add pinned flag to messages table</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🔒</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>User Capacity Limits</h3>
+          <p>Let admins set a maximum member count per room. When the room is full, new users see a "Room is full" message and can join a waitlist.</p>
+          <div class="card-footer">💡 Add max_users column to rooms table</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">⏰</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Temporary Rooms</h3>
+          <p>Create rooms that automatically delete themselves after a set time (e.g. 1 hour, 1 day). Useful for events, sessions, or one-off discussions.</p>
+          <div class="card-footer">💡 Add expires_at column, background cleanup job</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Media & Files ── -->
+    <section class="tint-yellow">
+      <div class="section-header">
+        <div class="section-icon">🖼️</div>
+        <div>
+          <div class="section-title">Media &amp; Files</div>
+          <div class="section-desc">Sharing beyond plain text</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🖼️</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Image Sharing</h3>
+          <p>Paste or upload images directly into chat. Show an inline thumbnail that users can click to expand. Images self-destruct with the message they're attached to.</p>
+          <div class="card-footer">💡 Store to /uploads, serve via Express static, or use Cloudinary free tier</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🎤</div>
+            <span class="badge badge-hard">Hard</span>
+          </div>
+          <h3>Voice Messages</h3>
+          <p>Hold a button to record a short audio clip (max 60 seconds) and send it as a message. The recipient sees a waveform and a play button inline in the chat.</p>
+          <div class="card-footer">💡 MediaRecorder API, store as .webm blob</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🔗</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Link Previews</h3>
+          <p>When a message contains a URL, automatically fetch its Open Graph metadata (title, description, image) server-side and show a small preview card below the message.</p>
+          <div class="card-footer">💡 og-scraper on the server, cached in SQLite</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Security & Moderation ── -->
+    <section class="tint-red">
+      <div class="section-header">
+        <div class="section-icon">🛡️</div>
+        <div>
+          <div class="section-title">Security &amp; Moderation</div>
+          <div class="section-desc">Keeping the platform safe</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🚫</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Word Filter</h3>
+          <p>A configurable blocklist of words managed from the admin dashboard. Matching messages are either blocked or have the word replaced with asterisks before sending.</p>
+          <div class="card-footer">💡 Store blocklist in config table, check on server emit</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">⚡</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Rate Limiting</h3>
+          <p>Limit users to a maximum of N messages per minute per room to prevent spam and flooding. Show a countdown timer when the limit is hit.</p>
+          <div class="card-footer">💡 Per-socket message counter with sliding window</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🕐</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Timed Bans</h3>
+          <p>Upgrade "kick" to support timed bans by IP address — 10 minutes, 1 hour, or permanent. The admin sets the duration when banning and the ban auto-expires.</p>
+          <div class="card-footer">💡 New bans table with expires_at, checked on socket connect</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🔐</div>
+            <span class="badge badge-hard">Hard</span>
+          </div>
+          <h3>End-to-End Encryption</h3>
+          <p>Encrypt messages in the browser before sending so the server never sees plaintext. Only users in the room with the shared key can decrypt and read them.</p>
+          <div class="card-footer">💡 Web Crypto API — ECDH key exchange per room</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Admin & Infrastructure ── -->
+    <section class="tint-pink">
+      <div class="section-header">
+        <div class="section-icon">⚙️</div>
+        <div>
+          <div class="section-title">Admin &amp; Infrastructure</div>
+          <div class="section-desc">Better tooling, analytics, and deployment</div>
+        </div>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">📊</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Live Analytics Charts</h3>
+          <p>Add a charts panel to the admin dashboard showing messages per hour, peak concurrency, most active rooms, and new user joins over time.</p>
+          <div class="card-footer">💡 Recharts (already in the project) + aggregation queries</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">📤</div>
+            <span class="badge badge-easy">Easy</span>
+          </div>
+          <h3>Export Chat History</h3>
+          <p>Admin can download the full message history for any room as a JSON or plain-text file for archiving or moderation review before deleting the room.</p>
+          <div class="card-footer">💡 Express endpoint streaming SQLite results as JSON</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">☁️</div>
+            <span class="badge badge-medium">Medium</span>
+          </div>
+          <h3>Persistent Cloud Database</h3>
+          <p>Migrate from local SQLite files to Turso (hosted libSQL) so data survives server restarts, scaling events, and re-deploys on free hosting tiers.</p>
+          <div class="card-footer">💡 Turso free tier — 500 DBs, 9 GB, libSQL-compatible API</div>
+        </div>
+
+        <div class="card">
+          <div class="card-top">
+            <div class="card-emoji">🎙️</div>
+            <span class="badge badge-hard">Hard</span>
+          </div>
+          <h3>Voice Channels (WebRTC)</h3>
+          <p>Add optional voice-only channels alongside text rooms. Users join a voice channel to talk in real time using browser WebRTC with no external service required.</p>
+          <div class="card-footer">💡 simple-peer + Socket.io for WebRTC signaling</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Legend -->
+    <div class="legend">
+      <span class="legend-label">Effort:</span>
+      <span class="badge badge-easy">Easy</span>
+      <span style="font-size:0.78rem;color:var(--muted)">A weekend or less</span>
+      <span class="badge badge-medium">Medium</span>
+      <span style="font-size:0.78rem;color:var(--muted)">A few days</span>
+      <span class="badge badge-hard">Hard</span>
+      <span style="font-size:0.78rem;color:var(--muted)">A week or more</span>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>Cosmos Chat &mdash; Built with Node.js, Express, Socket.io, React, SQLite</p>
+  </footer>
+
+</body>
+</html>

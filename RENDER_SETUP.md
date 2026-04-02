@@ -17,13 +17,13 @@ Cosmos Chat runs as a single Node.js process that:
 
 1. A [Render](https://render.com) account (free tier works)
 2. Your project pushed to a GitHub or GitLab repository
-3. Your `ADMIN_TOKEN` value (choose a strong password — this protects your admin panel)
+3. Your `ADMIN_TOKEN` value (the password you use to access `/admin`)
 
 ---
 
 ## Step 1 — Push to GitHub
 
-Make sure your code is in a GitHub repository. The `data/` folder (SQLite databases) is excluded from git via `.gitignore`, which is correct — Render's disk will store them persistently.
+Make sure your code is on GitHub. The `data/` folder is excluded from git on purpose — **you do not need to upload it**. The server creates the SQLite files automatically on first startup.
 
 ---
 
@@ -38,13 +38,13 @@ Make sure your code is in a GitHub repository. The `data/` folder (SQLite databa
 |---|---|
 | **Name** | `cosmos-chat` (or anything you like) |
 | **Region** | Closest to your users |
-| **Branch** | `main` |
+| **Branch** | `main` (or `master`) |
 | **Runtime** | `Node` |
-| **Build Command** | `npm install && npm run build` |
+| **Build Command** | `npm install --include=dev && npm run build` |
 | **Start Command** | `npm start` |
-| **Instance Type** | Free (or Starter for persistence) |
+| **Instance Type** | Free |
 
-> **Important:** The free tier on Render does **not** provide a persistent disk. Your SQLite data will be wiped on every redeploy or restart. To keep data permanently, use a **Starter** plan or higher and add a Render Disk (see Step 4).
+> **Important:** The build command must be `npm install --include=dev && npm run build` — not just `npm install`. The `--include=dev` flag installs the frontend build tools (Vite, React, etc.) which are needed to compile the app, even though they are listed as dev dependencies.
 
 ---
 
@@ -55,28 +55,39 @@ In the Render dashboard, go to your service → **Environment** tab and add:
 | Key | Value | Notes |
 |---|---|---|
 | `NODE_ENV` | `production` | Enables static file serving |
-| `ADMIN_TOKEN` | `your-strong-secret-here` | Admin panel password — keep this secret |
-| `PORT` | (leave blank) | Render sets this automatically |
+| `ADMIN_TOKEN` | `your-secret-here` | Must match what you enter on the `/admin` page |
 
-> **Do not** set `SERVER_PORT` or `DATABASE_URL` — they are not used in production.
+> Do **not** set `SERVER_PORT`, `DATABASE_URL`, or `DATA_DIR` unless you are using a persistent disk (see Step 4).
 
 ---
 
-## Step 4 — Add a Persistent Disk (Recommended)
+## Step 4 — Data Persistence (Free vs Paid)
 
-Without a persistent disk, your SQLite data resets on every deploy.
+### Free tier — data resets on restart
+
+On Render's free tier, the filesystem is **ephemeral** — it resets whenever your service restarts or redeploys. This means:
+- Chat messages, rooms, and user history are lost on restart
+- The global room is re-created automatically on each start
+- The app works fine otherwise — this is just a storage limitation
+
+**You do not need to upload the `data/` folder to GitHub.** The server creates it fresh on every startup.
+
+This is perfectly fine for testing and demos. If you want to keep data permanently, upgrade to the Starter plan and follow the paid disk setup below.
+
+---
+
+### Paid tier (Starter+) — permanent data storage
 
 1. In your Render service, go to **Disks** → **Add Disk**
 2. Set the **Mount Path** to `/data`
-3. Set the size (1 GB is more than enough for most usage)
-
-Then add one more environment variable in Render's **Environment** tab:
+3. Set the size to 1 GB (more than enough)
+4. Add one extra environment variable:
 
 | Key | Value |
 |---|---|
 | `DATA_DIR` | `/data` |
 
-That's it — no code changes needed. The server reads `DATA_DIR` and stores all SQLite files there. Redeploy and your databases will survive restarts and redeployments.
+That's it — the server reads `DATA_DIR` and stores all SQLite files there. Data will survive restarts and redeployments.
 
 ---
 
@@ -84,11 +95,11 @@ That's it — no code changes needed. The server reads `DATA_DIR` and stores all
 
 Click **Create Web Service**. Render will:
 1. Clone your repository
-2. Run `npm install && npm run build` (builds the React frontend)
+2. Run `npm install --include=dev && npm run build` (installs everything and builds the React frontend)
 3. Start the server with `npm start`
 4. Assign a public URL like `https://cosmos-chat-xxxx.onrender.com`
 
-The build takes 2–4 minutes on first deploy.
+The build takes 3–5 minutes on first deploy.
 
 ---
 
@@ -100,14 +111,14 @@ Once live, visit:
 https://your-app.onrender.com/admin
 ```
 
-Enter the `ADMIN_TOKEN` value you set in the environment variables.
+Enter the exact value you set as `ADMIN_TOKEN` in Step 3.
 
 From the admin panel you can:
 - View all rooms and their secret keys
 - Read all messages (including deleted ones)
 - See live connected users and their IPs
-- Browse historical user sessions
-- View the full audit log (kicks, deletions, room deletes)
+- Browse user sessions per room
+- View the audit log (kicks, deletions)
 - Kick users and delete messages
 
 ---
@@ -125,59 +136,54 @@ From the admin panel you can:
 
 | Variable | Required | Description |
 |---|---|---|
-| `NODE_ENV` | Yes | Set to `production` for the server to serve the React app |
-| `ADMIN_TOKEN` | Yes | Secret token for accessing the admin dashboard |
-| `DATA_DIR` | No | Set to `/data` if using a Render persistent disk |
-| `PORT` | No | Set automatically by Render |
+| `NODE_ENV` | Yes | Set to `production` — enables the server to serve the React build |
+| `ADMIN_TOKEN` | Yes | Password for the admin dashboard at `/admin` |
+| `DATA_DIR` | No | Override SQLite data directory. Set to `/data` when using a Render persistent disk |
+| `PORT` | No | Set automatically by Render — do not override |
 
 ---
 
-## Build & Start Commands Summary
+## Build & Start Commands
 
 ```bash
-# Build command (run once on deploy)
-npm install && npm run build
+# Build command — installs everything including frontend tools, then compiles the app
+npm install --include=dev && npm run build
 
-# Start command (runs the server)
+# Start command — runs the backend server, which also serves the compiled frontend
 npm start
 ```
-
-The `npm start` command runs `node server/index.js` in production mode, which:
-- Reads the `ADMIN_TOKEN` from the environment (exits with an error if not set)
-- Initialises all four SQLite databases in the `data/` directory
-- Serves the built React frontend from `dist/public/`
-- Starts the Express + Socket.io server on the port Render provides
 
 ---
 
 ## Database Files
 
-The app stores data across four SQLite files:
+The app stores data across four SQLite files created automatically in the `data/` directory:
 
 | File | Contents |
 |---|---|
 | `data/rooms.db` | All chat rooms and their secret keys |
 | `data/messages.db` | All messages (including faded and admin-deleted) |
-| `data/users.db` | Historical user session records (connections/disconnections) |
-| `data/audit.db` | Admin action log (kicks, message deletions, room deletions) |
-
-These files are created automatically on first run — no setup needed.
+| `data/users.db` | Historical user session records |
+| `data/audit.db` | Admin action log (kicks, deletions, room removals) |
 
 ---
 
 ## Troubleshooting
 
-**App won't start — "ADMIN_TOKEN environment variable is not set"**
-→ Add `ADMIN_TOKEN` in Render's Environment tab and redeploy.
+**`vite: not found` during build**
+→ Make sure your build command is `npm install --include=dev && npm run build` (not just `npm install && npm run build`).
 
-**Admin panel says "Forbidden"**
-→ Make sure the token you're entering matches exactly what you set in `ADMIN_TOKEN`.
+**App won't start — "ADMIN_TOKEN environment variable is not set"**
+→ Add `ADMIN_TOKEN` in the Environment tab and redeploy.
+
+**Admin panel says "Invalid token"**
+→ Enter the exact value you set for `ADMIN_TOKEN` — no extra spaces.
 
 **Data disappears after redeploy**
-→ You're on the free tier without a persistent disk. Follow Step 4 to add one.
-
-**Build fails**
-→ Check that your repository has `package.json`, `vite.config.ts`, and the `server/` folder at the root level.
+→ Expected on free tier. Add a persistent disk (Step 4) to keep data permanently.
 
 **WebSocket not connecting**
-→ Render supports WebSockets on all plans. Make sure you're using `wss://` (Render enforces HTTPS/WSS automatically).
+→ Render supports WebSockets on all plans. Make sure you are not blocking port 443 on your network.
+
+**Build fails with "Cannot find module"**
+→ Make sure you are using `npm install --include=dev` in the build command so all frontend dependencies are installed.

@@ -119,7 +119,7 @@ function AdminLogin({ onAuth, expiredSession }: { onAuth: (token: string) => voi
           </button>
         </form>
 
-        <p className="text-gray-700 text-xs text-center mt-6">Set your token in Replit Secrets as ADMIN_TOKEN</p>
+        <p className="text-gray-700 text-xs text-center mt-6">Set ADMIN_TOKEN as an environment variable on your server</p>
       </div>
     </div>
   );
