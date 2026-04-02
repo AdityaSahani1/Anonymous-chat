@@ -465,13 +465,11 @@ const staticDir = join(__dirname, "..", "dist", "public");
 
 if (isProduction && existsSync(staticDir)) {
   app.use(express.static(staticDir));
-
-  app.get('/:path(*)', (req, res) => {
+  app.get("*", (req, res) => {
     if (!req.path.startsWith("/api/") && !req.path.startsWith("/socket.io/")) {
       res.sendFile(join(staticDir, "index.html"));
     }
   });
-
   console.log(`✓ Serving static files from ${staticDir}`);
 }
 
