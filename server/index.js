@@ -1,55 +1,53 @@
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import pg from "pg";
 import { v4 as uuidv4 } from "uuid";
 import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync } from "fs";
 
+import {
+  getRooms,
+  getAdminRooms,
+  getRoomById,
+  insertRoom,
+  deleteRoom,
+} from "./db/rooms-db.js";
+
+import {
+  insertMessage,
+  getMessagesByRoom,
+  getMessageCountByRoom,
+  markMessageFaded,
+  markMessageDeletedByAdmin,
+} from "./db/messages-db.js";
+
+import {
+  insertUserSession,
+  updateUserDisconnect,
+  getAllUserSessions,
+} from "./db/users-db.js";
+
+import { logAudit, getAuditLog } from "./db/audit-db.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const { Pool } = pg;
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+if (!ADMIN_TOKEN) {
+  console.error(
+    "ERROR: ADMIN_TOKEN environment variable is not set. Please set it before starting the server."
+  );
+  process.exit(1);
+}
 
-const ADMIN_TOKEN = randomBytes(16).toString("hex");
 console.log("\n╔══════════════════════════════════════════════╗");
 console.log("║          COSMOS CHAT SERVER STARTED          ║");
 console.log("╠══════════════════════════════════════════════╣");
-console.log(`║  ADMIN TOKEN: ${ADMIN_TOKEN}  ║`);
+console.log("║  Admin token loaded from environment         ║");
 console.log("╚══════════════════════════════════════════════╝\n");
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-async function initDb() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS rooms (
-      id          TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      secret_key  TEXT,
-      created_at  TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      room_id           TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-      username          TEXT NOT NULL,
-      text              TEXT NOT NULL,
-      timestamp         TIMESTAMPTZ DEFAULT NOW(),
-      deleted           BOOLEAN DEFAULT FALSE,
-      deleted_by_admin  BOOLEAN DEFAULT FALSE,
-      disappear_after_ms INTEGER,
-      ip                TEXT
-    );
-
-    INSERT INTO rooms (id, name) VALUES ('global', 'Global Chat')
-    ON CONFLICT (id) DO NOTHING;
-  `);
-  console.log("✓ Database schema ready");
-}
+console.log("✓ Database modules ready (SQLite)");
 
 const connectedUsers = new Map();
 
@@ -63,9 +61,12 @@ const verifyAdmin = (req, res, next) => {
 };
 
 function getOnlineCountForRoom(roomId) {
+  const room = io?.sockets?.adapter?.rooms?.get(roomId);
+  if (!room) return 0;
   let count = 0;
-  for (const user of connectedUsers.values()) {
-    if (user.roomId === roomId && !user.isAdmin) count++;
+  for (const socketId of room) {
+    const user = connectedUsers.get(socketId);
+    if (user && !user.isAdmin) count++;
   }
   return count;
 }
@@ -75,18 +76,15 @@ app.post("/api/chat/admin/auth", (req, res) => {
   res.json({ ok: token === ADMIN_TOKEN });
 });
 
-app.get("/api/chat/rooms", async (req, res) => {
+app.get("/api/chat/rooms", (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, name, created_at, (secret_key IS NOT NULL) AS has_key
-       FROM rooms ORDER BY created_at`
-    );
+    const rows = getRooms();
     res.json(
-      result.rows.map((r) => ({
+      rows.map((r) => ({
         id: r.id,
         name: r.name,
         memberCount: getOnlineCountForRoom(r.id),
-        hasKey: r.has_key,
+        hasKey: !!r.has_key,
         createdAt: r.created_at,
       }))
     );
@@ -96,17 +94,14 @@ app.get("/api/chat/rooms", async (req, res) => {
   }
 });
 
-app.post("/api/chat/rooms", async (req, res) => {
+app.post("/api/chat/rooms", (req, res) => {
   try {
     const { name } = req.body || {};
     if (!name?.trim()) return res.status(400).json({ error: "Name required" });
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const id = `${slug}-${randomBytes(3).toString("hex")}`;
     const secretKey = randomBytes(3).toString("hex").toUpperCase();
-    await pool.query(
-      "INSERT INTO rooms (id, name, secret_key) VALUES ($1, $2, $3)",
-      [id, name.trim(), secretKey]
-    );
+    insertRoom(id, name.trim(), secretKey);
     broadcastRoomsList();
     res.json({ id, name: name.trim(), key: secretKey });
   } catch (err) {
@@ -115,25 +110,21 @@ app.post("/api/chat/rooms", async (req, res) => {
   }
 });
 
-app.get("/api/chat/admin/rooms", verifyAdmin, async (req, res) => {
+app.get("/api/chat/admin/rooms", verifyAdmin, (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT r.id, r.name, r.created_at, r.secret_key,
-              COUNT(m.id)::int AS total_messages
-       FROM rooms r
-       LEFT JOIN messages m ON m.room_id = r.id
-       GROUP BY r.id, r.name, r.created_at, r.secret_key
-       ORDER BY r.created_at`
-    );
+    const rows = getAdminRooms();
+    const countRows = getMessageCountByRoom();
+    const countMap = {};
+    for (const c of countRows) countMap[c.room_id] = c.total;
     res.json(
-      result.rows.map((r) => ({
+      rows.map((r) => ({
         id: r.id,
         name: r.name,
         memberCount: getOnlineCountForRoom(r.id),
         createdAt: r.created_at,
-        totalMessages: r.total_messages,
+        totalMessages: countMap[r.id] || 0,
         hasKey: !!r.secret_key,
-        secretKey: r.secret_key,
+        secretKey: r.secret_key || null,
       }))
     );
   } catch (err) {
@@ -142,23 +133,18 @@ app.get("/api/chat/admin/rooms", verifyAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/chat/admin/messages/:roomId", verifyAdmin, async (req, res) => {
+app.get("/api/chat/admin/messages/:roomId", verifyAdmin, (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, room_id, username, text, timestamp, deleted,
-              deleted_by_admin, disappear_after_ms, ip
-       FROM messages WHERE room_id = $1 ORDER BY timestamp`,
-      [req.params.roomId]
-    );
+    const rows = getMessagesByRoom(req.params.roomId, true);
     res.json(
-      result.rows.map((m) => ({
+      rows.map((m) => ({
         id: m.id,
         username: m.username,
         text: m.text,
         roomId: m.room_id,
         timestamp: m.timestamp,
-        deleted: m.deleted,
-        deletedByAdmin: m.deleted_by_admin,
+        deleted: !!m.deleted,
+        deletedByAdmin: !!m.deleted_by_admin,
         ip: m.ip,
         disappearAfterMs: m.disappear_after_ms,
       }))
@@ -170,28 +156,60 @@ app.get("/api/chat/admin/messages/:roomId", verifyAdmin, async (req, res) => {
 });
 
 app.get("/api/chat/admin/users", verifyAdmin, (req, res) => {
-  const ipMap = new Map();
-  for (const user of connectedUsers.values()) {
-    if (!ipMap.has(user.ip)) ipMap.set(user.ip, []);
-    ipMap.get(user.ip).push(user.username);
+  try {
+    const ipMap = new Map();
+    for (const user of connectedUsers.values()) {
+      if (!ipMap.has(user.ip)) ipMap.set(user.ip, []);
+      ipMap.get(user.ip).push(user.username);
+    }
+
+    const sessions = getAllUserSessions();
+
+    const result = sessions.map((session) => {
+      const liveUser = connectedUsers.get(session.id);
+      const isLive = !!liveUser;
+      return {
+        socketId: session.id,
+        username: session.username,
+        ip: session.ip,
+        connectedAt: session.connected_at,
+        disconnectedAt: session.disconnected_at || null,
+        activeRoom: liveUser?.roomId || session.last_room || null,
+        status: isLive ? "online" : "offline",
+        sameIpUsers: isLive
+          ? (ipMap.get(session.ip) || []).filter((n) => n !== session.username)
+          : [],
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get users" });
   }
-  const users = Array.from(connectedUsers.entries()).map(([socketId, user]) => ({
-    socketId,
-    username: user.username,
-    ip: user.ip,
-    connectedAt: user.connectedAt,
-    activeRoom: user.roomId || "global",
-    sameIpUsers: (ipMap.get(user.ip) || []).filter((n) => n !== user.username),
-  }));
-  res.json(users);
 });
 
-app.delete("/api/chat/admin/rooms/:roomId", verifyAdmin, async (req, res) => {
+app.get("/api/chat/admin/audit-log", verifyAdmin, (req, res) => {
+  try {
+    res.json(getAuditLog());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get audit log" });
+  }
+});
+
+app.delete("/api/chat/admin/rooms/:roomId", verifyAdmin, (req, res) => {
   const { roomId } = req.params;
   if (roomId === "global")
     return res.status(400).json({ error: "Cannot delete global room" });
   try {
-    await pool.query("DELETE FROM rooms WHERE id = $1", [roomId]);
+    deleteRoom(roomId);
+    logAudit({
+      id: uuidv4(),
+      action: "delete_room",
+      target: roomId,
+      detail: null,
+    });
     io.to(roomId).emit("room_deleted", { roomId });
     broadcastRoomsList();
     res.json({ ok: true });
@@ -206,17 +224,15 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-async function broadcastRoomsList(target) {
+function broadcastRoomsList(target) {
   try {
-    const result = await pool.query(
-      "SELECT id, name, created_at, (secret_key IS NOT NULL) AS has_key FROM rooms ORDER BY created_at"
-    );
-    const rooms = result.rows.map((r) => ({
+    const rows = getRooms();
+    const rooms = rows.map((r) => ({
       id: r.id,
       name: r.name,
       memberCount: getOnlineCountForRoom(r.id),
       createdAt: r.created_at,
-      hasKey: r.has_key,
+      hasKey: !!r.has_key,
     }));
     if (target) {
       target.emit("rooms_list", rooms);
@@ -233,7 +249,7 @@ function broadcastRoomUpdate(roomId) {
   io.emit("room_update", { roomId, memberCount: count });
 }
 
-io.on("connection", async (socket) => {
+io.on("connection", (socket) => {
   const query = socket.handshake.query;
   const username = query.username;
   const adminToken = query.adminToken;
@@ -247,25 +263,20 @@ io.on("connection", async (socket) => {
   if (isAdmin) {
     socket.join("__admin_room__");
 
-    socket.on("admin_join_room", async (roomId) => {
+    socket.on("admin_join_room", (roomId) => {
       socket.join(roomId);
       try {
-        const result = await pool.query(
-          `SELECT id, room_id, username, text, timestamp, deleted,
-                  deleted_by_admin, disappear_after_ms, ip
-           FROM messages WHERE room_id = $1 ORDER BY timestamp`,
-          [roomId]
-        );
+        const rows = getMessagesByRoom(roomId, true);
         socket.emit(
           "admin_history",
-          result.rows.map((m) => ({
+          rows.map((m) => ({
             id: m.id,
             username: m.username,
             text: m.text,
             roomId: m.room_id,
             timestamp: m.timestamp,
-            deleted: m.deleted,
-            deletedByAdmin: m.deleted_by_admin,
+            deleted: !!m.deleted,
+            deletedByAdmin: !!m.deleted_by_admin,
             ip: m.ip,
             disappearAfterMs: m.disappear_after_ms,
           }))
@@ -275,12 +286,15 @@ io.on("connection", async (socket) => {
       }
     });
 
-    socket.on("admin_delete_message", async ({ messageId, roomId }) => {
+    socket.on("admin_delete_message", ({ messageId, roomId }) => {
       try {
-        await pool.query(
-          "UPDATE messages SET deleted = TRUE, deleted_by_admin = TRUE WHERE id = $1",
-          [messageId]
-        );
+        markMessageDeletedByAdmin(messageId);
+        logAudit({
+          id: uuidv4(),
+          action: "delete_message",
+          target: messageId,
+          detail: `room:${roomId}`,
+        });
         io.to(roomId).emit("message_deleted", { messageId, roomId });
       } catch (err) {
         console.error(err);
@@ -290,6 +304,12 @@ io.on("connection", async (socket) => {
     socket.on("admin_kick_user", ({ username: targetUsername, reason }) => {
       for (const [sid, user] of connectedUsers.entries()) {
         if (user.username === targetUsername) {
+          logAudit({
+            id: uuidv4(),
+            action: "kick_user",
+            target: targetUsername,
+            detail: reason || null,
+          });
           io.to(sid).emit("kicked", {
             reason: reason || "You have been removed by an administrator.",
           });
@@ -300,7 +320,7 @@ io.on("connection", async (socket) => {
       }
     });
 
-    await broadcastRoomsList(socket);
+    broadcastRoomsList(socket);
     return;
   }
 
@@ -309,28 +329,27 @@ io.on("connection", async (socket) => {
     return;
   }
 
+  const connectedAt = new Date().toISOString();
   connectedUsers.set(socket.id, {
     username: username.trim(),
     ip,
-    roomId: "global",
-    connectedAt: new Date().toISOString(),
+    roomId: null,
+    connectedAt,
     isAdmin: false,
   });
 
-  socket.on("join_room", async ({ roomId, key }) => {
+  insertUserSession({ id: socket.id, username: username.trim(), ip, connectedAt });
+
+  socket.on("join_room", ({ roomId, key }) => {
     if (!roomId) return;
 
     if (roomId !== "global") {
       try {
-        const result = await pool.query(
-          "SELECT secret_key FROM rooms WHERE id = $1",
-          [roomId]
-        );
-        if (!result.rows.length) {
+        const room = getRoomById(roomId);
+        if (!room) {
           socket.emit("join_error", { message: "Room not found." });
           return;
         }
-        const room = result.rows[0];
         if (room.secret_key && room.secret_key !== key?.toUpperCase()) {
           socket.emit("join_error", { message: "Invalid room key." });
           return;
@@ -353,23 +372,16 @@ io.on("connection", async (socket) => {
     socket.emit("join_success", { roomId });
 
     try {
-      const result = await pool.query(
-        `SELECT id, room_id, username, text, timestamp, deleted, disappear_after_ms
-         FROM messages
-         WHERE room_id = $1 AND deleted_by_admin = FALSE
-         ORDER BY timestamp
-         LIMIT 150`,
-        [roomId]
-      );
+      const rows = getMessagesByRoom(roomId, false);
       socket.emit(
         "room_history",
-        result.rows.map((m) => ({
+        rows.map((m) => ({
           id: m.id,
           username: m.username,
           text: m.text,
           roomId: m.room_id,
           timestamp: m.timestamp,
-          deleted: m.deleted,
+          deleted: !!m.deleted,
           disappearAfterMs: m.disappear_after_ms,
           senderSocketId: null,
         }))
@@ -379,17 +391,17 @@ io.on("connection", async (socket) => {
     }
 
     broadcastRoomUpdate(roomId);
-    await broadcastRoomsList();
+    broadcastRoomsList();
   });
 
   socket.on("leave_room", (roomId) => {
     socket.leave(roomId);
     const user = connectedUsers.get(socket.id);
-    if (user) user.roomId = "global";
+    if (user) user.roomId = null;
     broadcastRoomUpdate(roomId);
   });
 
-  socket.on("send_message", async ({ roomId, text, disappearAfterMs }) => {
+  socket.on("send_message", ({ roomId, text, disappearAfterMs }) => {
     if (!text?.trim()) return;
     const user = connectedUsers.get(socket.id);
     if (!user) return;
@@ -398,19 +410,15 @@ io.on("connection", async (socket) => {
     const timestamp = new Date().toISOString();
 
     try {
-      await pool.query(
-        `INSERT INTO messages (id, room_id, username, text, timestamp, disappear_after_ms, ip)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          msgId,
-          roomId,
-          user.username,
-          text.trim(),
-          timestamp,
-          disappearAfterMs || null,
-          ip,
-        ]
-      );
+      insertMessage({
+        id: msgId,
+        roomId,
+        username: user.username,
+        text: text.trim(),
+        timestamp,
+        disappearAfterMs: disappearAfterMs || null,
+        ip,
+      });
     } catch (err) {
       console.error(err);
     }
@@ -428,12 +436,9 @@ io.on("connection", async (socket) => {
     io.to(roomId).emit("message", msg);
 
     if (disappearAfterMs && disappearAfterMs > 0) {
-      setTimeout(async () => {
+      setTimeout(() => {
         try {
-          await pool.query(
-            "UPDATE messages SET deleted = TRUE WHERE id = $1 AND deleted = FALSE",
-            [msgId]
-          );
+          markMessageFaded(msgId);
           io.to(roomId).emit("message_faded", { messageId: msgId, roomId });
         } catch (err) {
           console.error(err);
@@ -444,23 +449,22 @@ io.on("connection", async (socket) => {
 
   socket.on("message_viewed", () => {});
 
-  socket.on("disconnect", async () => {
+  socket.on("disconnect", () => {
     const user = connectedUsers.get(socket.id);
     if (user?.roomId) broadcastRoomUpdate(user.roomId);
+    updateUserDisconnect(socket.id, user?.roomId || null);
     connectedUsers.delete(socket.id);
-    await broadcastRoomsList();
+    broadcastRoomsList();
   });
 
-  await broadcastRoomsList(socket);
+  broadcastRoomsList(socket);
 });
 
-// In production: serve the built React app from dist/public
 const isProduction = process.env.NODE_ENV === "production";
 const staticDir = join(__dirname, "..", "dist", "public");
 
 if (isProduction && existsSync(staticDir)) {
   app.use(express.static(staticDir));
-  // SPA fallback — send index.html for any non-API route
   app.get("*", (req, res) => {
     if (!req.path.startsWith("/api/") && !req.path.startsWith("/socket.io/")) {
       res.sendFile(join(staticDir, "index.html"));
@@ -469,16 +473,8 @@ if (isProduction && existsSync(staticDir)) {
   console.log(`✓ Serving static files from ${staticDir}`);
 }
 
-// Render uses PORT; local dev uses SERVER_PORT
 const PORT = Number(process.env.PORT || process.env.SERVER_PORT || 3001);
 
-initDb()
-  .then(() => {
-    httpServer.listen(PORT, "0.0.0.0", () => {
-      console.log(`✓ Server listening on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to initialize database:", err);
-    process.exit(1);
-  });
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`✓ Server listening on port ${PORT}`);
+});

@@ -36,7 +36,9 @@ interface AdminUser {
   username: string;
   ip: string;
   connectedAt: string;
-  activeRoom: string;
+  disconnectedAt: string | null;
+  activeRoom: string | null;
+  status: "online" | "offline";
   sameIpUsers: string[];
 }
 
@@ -77,12 +79,12 @@ function AdminLogin({ onAuth, expiredSession }: { onAuth: (token: string) => voi
             <Shield className="h-8 w-8 text-indigo-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
-          <p className="text-gray-500 text-sm mt-1">Enter the token from server startup logs</p>
+          <p className="text-gray-500 text-sm mt-1">Enter your ADMIN_TOKEN secret</p>
         </div>
 
         {expiredSession && (
           <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-400 text-sm">
-            Session expired — server was restarted. Enter the new token shown in the server logs.
+            Session expired — please re-enter your ADMIN_TOKEN secret.
           </div>
         )}
 
@@ -117,7 +119,7 @@ function AdminLogin({ onAuth, expiredSession }: { onAuth: (token: string) => voi
           </button>
         </form>
 
-        <p className="text-gray-700 text-xs text-center mt-6">Token regenerates on each server restart</p>
+        <p className="text-gray-700 text-xs text-center mt-6">Set your token in Replit Secrets as ADMIN_TOKEN</p>
       </div>
     </div>
   );
@@ -379,7 +381,7 @@ function Dashboard({ adminToken, onLogout }: { adminToken: string; onLogout: () 
           <div className="text-[10px] text-gray-600 space-y-0.5">
             <div className="flex items-center gap-1.5">
               <Users className="h-3 w-3" />
-              <span>{users.length} users online now</span>
+              <span>{users.filter(u => u.status === "online").length} online · {users.length} total sessions</span>
             </div>
             <div>Invisible to all users. Not counted in member stats.</div>
           </div>
@@ -563,61 +565,93 @@ function Dashboard({ adminToken, onLogout }: { adminToken: string; onLogout: () 
               </div>
             )}
 
-            {tab === "users" && (
-              <div className="flex-1 overflow-y-auto p-3 md:p-4">
-                <div className="space-y-2">
-                  {users.length === 0 ? (
-                    <p className="text-gray-600 text-center py-8">No users connected.</p>
-                  ) : users.map(user => (
-                    <div key={user.socketId} className="bg-gray-900/50 rounded-lg p-3 border border-gray-800 flex items-start justify-between gap-3 group">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                          getUsernameColorClasses(user.username)
-                        )}>
-                          {getInitials(user.username)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                            <span className="font-bold text-white text-sm">{user.username}</span>
-                            <span className="text-[10px] bg-cyan-900/30 text-cyan-400 font-mono px-2 py-0.5 rounded">
-                              {user.ip}
-                            </span>
-                            {user.activeRoom && (
-                              <span className="text-[10px] text-gray-500">
-                                in #{user.activeRoom === "global" ? "global" : user.activeRoom.slice(-8)}
-                              </span>
+            {tab === "users" && (() => {
+              const roomUsers = selectedRoom
+                ? users.filter(u => u.activeRoom === selectedRoom)
+                : [];
+              const onlineInRoom = roomUsers.filter(u => u.status === "online");
+
+              return (
+                <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                  {!selectedRoom ? (
+                    <p className="text-gray-600 text-center py-12 text-sm">Select a room from the sidebar to view its users.</p>
+                  ) : (
+                    <>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2 px-1">
+                        {onlineInRoom.length} online · {roomUsers.length} total in this room
+                      </p>
+                      <div className="space-y-2">
+                        {roomUsers.length === 0 ? (
+                          <p className="text-gray-600 text-center py-8">No users have joined this room yet.</p>
+                        ) : roomUsers.map(user => (
+                          <div key={user.socketId} className={cn(
+                            "rounded-lg p-3 border flex items-start justify-between gap-3 group",
+                            user.status === "online"
+                              ? "bg-gray-900/70 border-gray-700"
+                              : "bg-gray-900/30 border-gray-800/60 opacity-60"
+                          )}>
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="relative shrink-0">
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
+                                  getUsernameColorClasses(user.username)
+                                )}>
+                                  {getInitials(user.username)}
+                                </div>
+                                <span className={cn(
+                                  "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-950",
+                                  user.status === "online" ? "bg-green-500" : "bg-gray-600"
+                                )} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                                  <span className={cn("font-bold text-sm", user.status === "online" ? "text-white" : "text-gray-400")}>
+                                    {user.username}
+                                  </span>
+                                  <span className="text-[10px] bg-cyan-900/30 text-cyan-400 font-mono px-2 py-0.5 rounded">
+                                    {user.ip}
+                                  </span>
+                                  {user.status === "offline" && (
+                                    <span className="text-[10px] text-gray-600 bg-gray-800/60 px-1.5 py-0.5 rounded">offline</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-600 space-y-0.5">
+                                  <div>Joined {format(new Date(user.connectedAt), "MMM d, h:mm:ss a")}</div>
+                                  {user.status === "offline" && user.disconnectedAt && (
+                                    <div>Left {format(new Date(user.disconnectedAt), "MMM d, h:mm:ss a")}</div>
+                                  )}
+                                </div>
+                                {user.sameIpUsers.length > 0 && (
+                                  <div className="mt-1 text-[11px] text-yellow-600 bg-yellow-900/20 px-2 py-1 rounded flex items-center gap-1">
+                                    <span>⚠</span>
+                                    Same IP as: {user.sameIpUsers.map(n => `"${n}"`).join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {user.status === "online" && (
+                              <button
+                                onClick={() => handleKickUser(user.username)}
+                                title={`Kick ${user.username}`}
+                                className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded transition-all shrink-0"
+                              >
+                                <UserX className="h-4 w-4" />
+                              </button>
                             )}
                           </div>
-                          <div className="text-[11px] text-gray-600">
-                            Connected {format(user.connectedAt, "h:mm:ss a")}
-                          </div>
-                          {user.sameIpUsers.length > 0 && (
-                            <div className="mt-1 text-[11px] text-yellow-600 bg-yellow-900/20 px-2 py-1 rounded flex items-center gap-1">
-                              <span>⚠</span>
-                              Same IP as: {user.sameIpUsers.map(n => `"${n}"`).join(", ")}
-                            </div>
-                          )}
-                        </div>
+                        ))}
                       </div>
 
-                      <button
-                        onClick={() => handleKickUser(user.username)}
-                        title={`Kick ${user.username}`}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded transition-all shrink-0"
-                      >
-                        <UserX className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                      <div className="mt-6 p-3 bg-gray-900/50 rounded-lg border border-gray-800 text-[11px] text-gray-600">
+                        <p className="font-semibold text-gray-400 mb-2">IP Tracking Notes</p>
+                        <p>Same-IP detection helps identify if multiple nicknames are from the same device. Kick button appears on hover for online users.</p>
+                      </div>
+                    </>
+                  )}
                 </div>
-
-                <div className="mt-6 p-3 bg-gray-900/50 rounded-lg border border-gray-800 text-[11px] text-gray-600">
-                  <p className="font-semibold text-gray-400 mb-2">IP Tracking Notes</p>
-                  <p>Same-IP detection helps identify if multiple nicknames are from the same device. Stored in memory only — resets on server restart.</p>
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </>
         )}
       </main>

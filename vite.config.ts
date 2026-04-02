@@ -49,6 +49,14 @@ export default defineConfig({
       strict: false,
       deny: ["**/.*"],
     },
+    watch: {
+      ignored: [
+        "**/.local/**",
+        "**/.cache/**",
+        "**/data/**",
+        "**/node_modules/**",
+      ],
+    },
     proxy: {
       "/api": {
         target: `http://localhost:${serverPort}`,
