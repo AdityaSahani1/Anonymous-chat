@@ -1,0 +1,17 @@
+packages:
+  "framer-motion": "Smooth layout animations and transitions for chat bubbles and dialogs"
+  "zustand": "Lightweight global state management for anonymous user session"
+  "date-fns": "Formatting chat message timestamps"
+  "clsx": "Utility for conditionally joining classNames"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+  "socket.io-client": "Real-time communication with the chat server"
+
+images:
+  - path: "artifacts/chat-app/public/images/login-bg.png"
+    description: "Dark abstract gradient mesh background in deep violet, indigo, and black, smooth blurred waves, sleek modern technology aesthetic, subtle glowing edges"
+    aspect_ratio: "16:9"
+
+notes:
+  - API uses @workspace/api-client-react for REST hooks (rooms listing/creation)
+  - WebSocket connects on default path with username in query
+  - Global state (username, active room) managed via Zustand
